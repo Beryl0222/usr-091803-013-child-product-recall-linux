@@ -1,48 +1,33 @@
-"""儿童产品风险召回的基础运行入口。"""
+"""儿童产品风险召回的运行入口。
+
+健康检查身份保持稳定；业务接口由 recall 包提供。
+"""
 
 import argparse
-import json
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SERVICE_ID = "child-product-recall"
-SERVICE_NAME = "儿童产品风险召回"
+from recall import SERVICE_ID, SERVICE_NAME, health_payload
+from recall.api import Handler, make_handler
+from recall.seed import seed
+from recall.store import Store
 
-
-def health_payload():
-    """返回稳定的服务身份信息。"""
-    return {"status": "ok", "service": SERVICE_ID, "name": SERVICE_NAME}
-
-
-class Handler(BaseHTTPRequestHandler):
-    """提供健康检查，保留后续业务接口的明确入口。"""
-
-    def do_GET(self):
-        if self.path != "/health":
-            self.send_error(404)
-            return
-        body = json.dumps(health_payload(), ensure_ascii=False).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *_args):
-        return
+__all__ = ["Handler", "SERVICE_ID", "SERVICE_NAME", "health_payload"]
 
 
 def main():
     parser = argparse.ArgumentParser(description=SERVICE_NAME)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--seed", action="store_true", help="载入演示数据，便于本地联调")
     args = parser.parse_args()
     if args.check:
         assert health_payload()["service"] == SERVICE_ID
         print("基础检查通过")
         return
-    ThreadingHTTPServer(("0.0.0.0", args.port), Handler).serve_forever()
+    from http.server import ThreadingHTTPServer
+
+    handler = make_handler(seed(Store())) if args.seed else Handler
+    ThreadingHTTPServer(("0.0.0.0", args.port), handler).serve_forever()
 
 
 if __name__ == "__main__":
     main()
-
